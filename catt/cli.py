@@ -159,18 +159,45 @@ CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
 @click.group(context_settings=CONTEXT_SETTINGS)
 @click.option("-d", "--device", metavar="NAME_OR_IP", help="Select Chromecast device.")
+@click.option(
+    "-v",
+    "--volume",
+    type=click.IntRange(0, 100),
+    metavar="LVL",
+    help="Set volume before casting (0-100).",
+)
+@click.option(
+    "-mv",
+    "--media-volume",
+    type=click.IntRange(0, 100),
+    metavar="LVL",
+    help="Set volume before media playback (0-100).",
+)
+@click.option(
+    "-w",
+    "--wait",
+    type=click.IntRange(0, 10000),
+    metavar="MS",
+    help="Wait time before media playback (ms).",
+)
 @click.version_option(
     version=VERSION,
     prog_name=PROGRAM_NAME,
     message="%(prog)s v%(version)s, " + __codename__ + ".",
 )
 @click.pass_context
-def cli(ctx, device):
+def cli(ctx, device, volume, media_volume, wait):
     device_from_config = ctx.obj["options"].get("device")
     ctx.obj["selected_device"] = process_device(
         device or device_from_config, ctx.obj["aliases"]
     )
     ctx.obj["selected_device_is_from_cli"] = bool(device)
+    if volume is not None:
+        ctx.obj["options"]["volume"] = volume
+    if media_volume is not None:
+        ctx.obj["options"]["media_volume"] = media_volume
+    if wait is not None:
+        ctx.obj["options"]["wait"] = wait
 
 
 @cli.command(short_help="Send a video to a Chromecast for playing.")
@@ -229,27 +256,6 @@ def cli(ctx, device):
     help="Specify a title for the media file.",
 )
 @click.option(
-    "-v",
-    "--volume",
-    type=click.IntRange(0, 100),
-    metavar="LVL",
-    help="Set volume before casting (0-100).",
-)
-@click.option(
-    "-mv",
-    "--media-volume",
-    type=click.IntRange(0, 100),
-    metavar="LVL",
-    help="Set volume before media playback (0-100).",
-)
-@click.option(
-    "-w",
-    "--wait",
-    type=click.IntRange(0, 10000),
-    metavar="MS",
-    help="Wait time before media playback (ms).",
-)
-@click.option(
     "-b",
     "--block",
     is_flag=True,
@@ -274,12 +280,12 @@ def cast(
     ytdl_option,
     seek_to: str,
     title: str,
-    volume: int,
-    media_volume: int,
-    wait: int,
     stream_type: str,
     block: bool = False,
 ):
+    volume = settings.get("volume")
+    media_volume = settings.get("media_volume")
+    wait = settings.get("wait")
     initial_volume = None
     controller = "default" if force_default or ytdl_option else None
     playlist_playback = False
