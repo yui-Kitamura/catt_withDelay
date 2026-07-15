@@ -233,7 +233,21 @@ def cli(ctx, device):
     "--volume",
     type=click.IntRange(0, 100),
     metavar="LVL",
-    help="Set volume (0-100).",
+    help="Set volume before casting (0-100).",
+)
+@click.option(
+    "-mv",
+    "--media-volume",
+    type=click.IntRange(0, 100),
+    metavar="LVL",
+    help="Set volume before media playback (0-100).",
+)
+@click.option(
+    "-w",
+    "--wait",
+    type=click.IntRange(0, 10000),
+    metavar="MS",
+    help="Wait time before media playback (ms).",
 )
 @click.option(
     "-b",
@@ -261,9 +275,12 @@ def cast(
     seek_to: str,
     title: str,
     volume: int,
+    media_volume: int,
+    wait: int,
     stream_type: str,
     block: bool = False,
 ):
+    initial_volume = None
     controller = "default" if force_default or ytdl_option else None
     playlist_playback = False
     st_thr = su_thr = subs = None
@@ -327,6 +344,9 @@ def cast(
                 cst.cc_name,
             )
         )
+        if volume is not None or media_volume is not None:
+            initial_volume = cst.info.get("volume_level")
+
         if volume is not None:
             cst.volume(volume / 100.0)
 
@@ -346,12 +366,24 @@ def cast(
         else:
             raise ValueError("Invalid or undefined info type")
 
-    if stream.is_local_file or (subs is not None and subs.local_subs):
-        click.echo("Serving local file(s).")
-    if not media_is_image and (stream.is_local_file or block):
+    if wait is not None or media_volume is not None or not media_is_image and (stream.is_local_file or block):
         if not cst.wait_for(["PLAYING"], timeout=WAIT_PLAY_TIMEOUT):
+            if initial_volume is not None:
+                cst.volume(int(initial_volume) / 100.0)
             raise CliError("Playback of {} file has failed".format(local_or_remote))
-        cst.wait_for(["UNKNOWN", "IDLE"])
+
+        if wait is not None:
+            click.echo("Waiting {}ms...".format(wait))
+            time.sleep(wait / 1000.0)
+
+        if media_volume is not None:
+            cst.volume(media_volume / 100.0)
+
+        if not media_is_image and (stream.is_local_file or block):
+            cst.wait_for(["UNKNOWN", "IDLE"])
+
+        if initial_volume is not None:
+            cst.volume(int(initial_volume) / 100.0)
     elif (stream.is_local_file and media_is_image) or subs:
         while (st_thr and st_thr.is_alive()) or (su_thr and su_thr.is_alive()):
             time.sleep(1)
